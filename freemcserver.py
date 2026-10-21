@@ -24,22 +24,65 @@ class freemcserver():
         }
         
         # request panel to get auth and metrics
-        req = requests.get(f"https://panel.freemcserver.net/server/{id}/console", headers=header).text
-        
-        if req.find("currently expired") > -1:
-        	raise Exception("Renew your server first!")
+		req = requests.get(f"https://panel.freemcserver.net/server/{id}/console", headers=header).text
+		
+		if req.find("currently expired") > -1 or req.find("website is using a security service") > -1:
+			raise Exception("Server not renewed, or blocked by cloudflare.")
         	
-        print(req)
+		
+		found_metrics = re.search('^window\.fmcs\.metrics = "([A-Za-z0-9]+)";$', req)
+		if not found_metrics:
+			raise Exception("Failed to find metrics. Try again?")
+
+		found_metrics = found_metrics.group(1)
+
+		found_auth = re.search('^window\.fmcs\.api_key="([. A-Za-z0-9]+)";$', req)
+		if not found_auth:
+			raise Exception("Failed to find auth. Try again?")
+
+		found_auth = found_auth.group(1)
         
         # set up needed auth
-        auth = {
+		auth = {
         	"authorization": found_auth,
         	"x-fmcs-metrics-wfkpe9eata": found_metrics,
         }
         
-        
+
+	class server():
+
+		def GetPlayers(self):
+			req = requests.get(f"https://api.freemcserver.net/v4/server/{id}/ping", headers=auth).json()
+			if not req.get("success"):
+				print("Failed to get players", req.get("error"))
+				return []
+
+			users = []
+			for user in req.get("players", []):
+				users.append(freemcserver.user(user))
+
+			return users
+
 	class user():
 		global name
 		
 		def __init__(self, user):
 			name = user
+
+	class console():
+
+		def write(self, text):
+			req = requests.post(f'https://api.freemcserver.net/v4/server/{id}/command', headers=auth, json={'command': text}).json()
+			
+			if not req.get("success"):
+				print("Failed to write to console", req.get("error"))
+				return
+
+		def read(self, limit):
+			limit = limit or 200
+			req = requests.get(f"https://api.freemcserver.net/v4/server/{id}/logs?lines={limit}", headers=auth).json()
+			if not req.get("success"):
+				print("Failed to read console", req.get("error"))
+				return
+
+			return req.get("log")
