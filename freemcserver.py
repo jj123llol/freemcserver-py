@@ -64,10 +64,11 @@ class freemcserver():
 			return users
 
 	class user():
-		global name
-		
 		def __init__(self, user):
-			name = user
+			self.user = user
+
+		def kill(self):
+			freemcserver.console().write(f"kill {self.user}")
 
 	class console():
 
